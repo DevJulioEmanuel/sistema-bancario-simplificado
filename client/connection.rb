@@ -120,6 +120,21 @@ class Connection
     end
   end
 
+  def pagar(numero_conta, valor, descricao)
+    write_int(6)             # op = 6 (Pagar)
+    write_int(numero_conta)
+    write_double(valor)
+    write_utf(descricao)     # Envia a string da descrição
+
+    resposta = read_int
+    case resposta
+    when 0  then :ok
+    when -1 then :conta_invalida
+    when -2 then :saldo_insuficiente
+    else :erro
+    end
+  end
+
   def close
     @socket.close rescue nil
   end

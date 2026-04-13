@@ -46,9 +46,10 @@ module UI
         opcao = @prompt.select(@pastel.bright_black("  O que deseja fazer?"), cycle: true) do |menu|
           menu.choice "Depositar", :depositar
           menu.choice "Sacar", :sacar
-          menu.choice "Sair (Logout)", :sair
           menu.choice "Transferir", :transferir
+          menu.choice "Pagar Boleto/Conta", :pagar if conta.corrente?
           menu.choice "Projetar Rendimento", :projetar if conta.poupanca?
+          menu.choice "Sair (Logout)", :sair
         end
 
         case opcao
@@ -135,6 +136,34 @@ module UI
             sleep 2
           else
             UI.erro(@pastel, "Dados inválidos!")
+            sleep 1
+          end
+
+        when :pagar
+          descricao = @prompt.ask(@pastel.cyan("  Descrição (ex: Conta de Luz): "), required: true)
+          valor = @prompt.ask(@pastel.cyan("  Valor do pagamento (R$): "), convert: :float)
+
+          if valor && valor > 0
+            begin
+              conn = Connection.new
+              resultado = conn.pagar(conta.numero, valor, descricao)
+              conn.close
+
+              case resultado
+              when :ok
+                conta.saldo -= valor # Atualiza o saldo na tela
+                UI.sucesso(@pastel, "Pagamento de R$ #{'%.2f' % valor} (#{descricao}) realizado!")
+              when :saldo_insuficiente
+                UI.erro(@pastel, "Saldo ou Limite insuficiente para o pagamento!")
+              else
+                UI.erro(@pastel, "Falha ao realizar pagamento.")
+              end
+            rescue => e
+              UI.erro(@pastel, "Erro de comunicação: #{e.message}")
+            end
+            sleep 2
+          else
+            UI.erro(@pastel, "Valor inválido!")
             sleep 1
           end
 
