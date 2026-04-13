@@ -58,6 +58,8 @@ public class ManipuladorCliente {
                     String senha = in.readUTF();
                     int tipo = in.readInt();
 
+                    System.out.println("DEBUG LOGIN - cpf: " + cpf + " senha: " + senha + " tipo: " + tipo);
+
                     List<Conta> contas = clienteService.listarContas(cpf);
                     Conta encontada = null;
 
@@ -77,10 +79,11 @@ public class ManipuladorCliente {
 
                     if(encontada != null){
                         out.writeInt(0);
-
                         Conta[] conta = {encontada};
                         ContaOutputStream login = new ContaOutputStream(conta, 1, rawOut);
                         login.write(banco);
+                    } else {
+                        out.writeInt(-1);
                     }
 
                 } catch (IllegalArgumentException e){
@@ -150,6 +153,27 @@ public class ManipuladorCliente {
                 }
 
                 break;
+
+            // Pagar
+            case 6:
+                int numContaPag = in.readInt();
+                double valorPag = in.readDouble();
+                String descricao = in.readUTF();
+
+                Conta conta = contaService.buscarConta(numContaPag);
+                if(conta == null){
+                    out.writeInt(-1);
+                    break;
+                }
+
+                if(contaService.pagar(conta, valorPag, descricao)){
+                    out.writeInt(0);
+                } else {
+                    out.writeInt(-2);
+                }
+
+                break;
+
 
             // Projetar rendimento
             case 8:

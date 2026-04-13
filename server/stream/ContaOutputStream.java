@@ -23,7 +23,6 @@ public class ContaOutputStream extends OutputStream {
 
     public void write(Banco banco) throws IOException {
 
-        contas = banco.getContas().toArray(new Conta[0]);
         qtd = contas.length;
 
         dos.writeInt(qtd);
@@ -44,7 +43,7 @@ public class ContaOutputStream extends OutputStream {
                 byte[] tamanhoNomeTitularBytes = conta.getTitular().getNome().getBytes("UTF-8");
                 byte[] tamanhoCPFBytes = conta.getTitular().getCpf().getBytes("UTF-8");
                 byte[] tamanhoSenhaBytes = conta.getSenha().getBytes("UTF-8");
-                int tamanhoPayload = Integer.BYTES + Integer.BYTES + tamanhoNomeTitularBytes.length + Integer.BYTES + tamanhoCPFBytes.length + Integer.BYTES + Double.BYTES + Double.BYTES;
+                int tamanhoPayload = Integer.BYTES + Integer.BYTES + tamanhoNomeTitularBytes.length + Integer.BYTES + tamanhoCPFBytes.length + Integer.BYTES + Double.BYTES + Integer.BYTES + tamanhoSenhaBytes.length + Double.BYTES;
 
                 dos.writeInt(tipo);
 
@@ -57,6 +56,8 @@ public class ContaOutputStream extends OutputStream {
                 dos.write(tamanhoCPFBytes);
                 dos.writeInt(conta.getNumero());
                 dos.writeDouble(conta.getSaldo());
+                dos.writeInt(tamanhoSenhaBytes.length);
+                dos.write(tamanhoSenhaBytes);
                 dos.writeDouble(valor);
 
             }

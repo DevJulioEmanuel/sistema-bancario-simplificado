@@ -34,13 +34,15 @@ public class ContaInputStream extends InputStream {
                 dis.readFully(c);
                 String cpf = new String(c, "UTF-8");
 
-                int tamanhoSenha = dis.readInt();
-                byte[] s = new byte[tamanhoSenha];
-                dis.readFully(b);
-                String senha = new String(b, "UTF-8");
 
                 int numero = dis.readInt();
                 double saldo = dis.readDouble();
+
+                int tamanhoSenha = dis.readInt();
+                byte[] s = new byte[tamanhoSenha];
+                dis.readFully(s);
+                String senha = new String(s, "UTF-8");
+
                 double valor = dis.readDouble();
 
                 Cliente cliente = null;

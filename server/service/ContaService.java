@@ -53,6 +53,18 @@ public class ContaService {
         return false;
     }
 
+    public synchronized boolean pagar(Conta conta, double valor, String descricao){
+        if(conta instanceof ContaCorrente cc){
+            if (sacar(cc, valor)){
+                return true;
+            }
+        } else {
+            return false;
+        }
+
+        return false;
+    }
+
 
     public synchronized double projetarRendimento(Conta conta, int meses){
         if(!(conta instanceof ContaPoupanca)){
