@@ -4,8 +4,8 @@ require 'timeout'
 require_relative 'protocol'
 
 class Connection
-  NGROK_HOST = '0.tcp.sa.ngrok.io'
-  NGROK_PORT = 16962
+  NGROK_HOST = '10.10.255.63'
+  NGROK_PORT = 7896
   TIMEOUT    = 5  
 
   def initialize(host: NGROK_HOST, port: NGROK_PORT)
@@ -16,6 +16,8 @@ class Connection
   def write_int(val)
     @socket.write([val].pack('N'))
   end
+
+  
 
   def write_utf(str)
     bytes = str.encode('UTF-8').b
@@ -33,6 +35,12 @@ class Connection
     # Proteção: Se o Java fechar a conexão do nada, evitamos o travamento do Ruby
     raise "Servidor encerrou a conexão inesperadamente" if bytes.nil? || bytes.bytesize < 4
     bytes.unpack1('N')
+  end
+
+  def read_double
+    bytes = @socket.read(8)
+    raise "Servidor encerrou a conexão inesperadamente" if bytes.nil? || bytes.bytesize < 8
+    bytes.unpack1('G')
   end
 
   def cadastro(nome, cpf, senha, tipo)
@@ -78,6 +86,37 @@ class Connection
     when 0  then :ok
     when -2 then :saldo_insuficiente
     else :erro
+    end
+  end
+
+  def transferir(num_origem, num_destino, valor)
+    write_int(5)             # op = 5 (Transferir)
+    write_int(num_origem)
+    write_int(num_destino)
+    write_double(valor)
+
+    resposta = read_int
+    case resposta
+    when 0  then :ok
+    when -1 then :origem_invalida
+    when -2 then :destino_invalido
+    when -3 then :saldo_insuficiente
+    else :erro
+    end
+  end
+
+  def projetar_rendimento(numero_conta, meses)
+    write_int(8)             # op = 8 (Projetar Rendimento)
+    write_int(numero_conta)
+    write_int(meses)
+
+    resposta = read_int
+    if resposta == 0
+      # Sucesso! O Java nos mandou um 0 e logo em seguida o valor do rendimento (Double)
+      valor_rendimento = read_double
+      return { status: :ok, valor: valor_rendimento }
+    else
+      return { status: :erro }
     end
   end
 
