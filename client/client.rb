@@ -2,45 +2,73 @@ require 'tty-prompt'
 require 'pastel'
 require_relative 'models'
 require_relative 'protocol'
+require_relative 'connection'
 require_relative 'ui/banner'
 require_relative 'ui/tela_login'
-require_relative 'ui/tela_conta'
 require_relative 'ui/tela_cadastro'
+require_relative 'ui/tela_conta'
 
-pastel  = Pastel.new
-prompt  = TTY::Prompt.new
-
-# Futuramente: contas virão do servidor via socket
-# Por agora lê do arquivo local pra testar as telas
-contas = File.open('contas.bin', 'rb') { |f| Protocol.read_contas(f) }
+pastel = Pastel.new
+prompt = TTY::Prompt.new
 
 loop do
   UI.cabecalho(pastel)
 
   opcao = prompt.select(pastel.bright_black("  O que deseja fazer?"), cycle: true) do |menu|
-    menu.choice "Login",        :login
-    menu.choice "Criar conta",  :cadastro
-    menu.choice "Sair",         :sair
+    menu.choice "Login",       :login
+    menu.choice "Criar conta", :cadastro
+    menu.choice "Sair",        :sair
   end
 
   case opcao
   when :login
     resultado = UI::TelaLogin.new.exibir
 
-    # MOCK temporário — remove quando o servidor estiver pronto
-    titular = Cliente.new(1000, "Julio Emanuel", "012.345.678-90")
-    conta   = Conta.new(1, 1000, 2500.00, titular, 1200.00)
+    tipo = prompt.select(pastel.cyan("  Tipo de conta:")) do |menu|
+      menu.choice "Conta Corrente", 1
+      menu.choice "Conta Poupança", 2
+    end
 
-    UI::TelaConta.new.exibir(conta)
+    begin
+      conn  = Connection.new
+      conta = conn.login(resultado[:cpf], resultado[:senha], tipo)
+      conn.close
 
-  when :cadastro
-    dados = UI::TelaCadastro.new.exibir
-    if dados
+      if conta == :erro || conta.nil?
+        UI.cabecalho(pastel)
+        UI.erro(pastel, "CPF, senha ou tipo de conta incorretos.")
+        sleep 2
+      else
+        UI::TelaConta.new.exibir(conta)
+      end
+    rescue Errno::ECONNREFUSED, Errno::EAGAIN, Errno::EWOULDBLOCK, IO::TimeoutError
       UI.cabecalho(pastel)
-      UI.sucesso(pastel, "Cadastro enviado! Aguardando servidor...")
+      UI.erro(pastel, "Servidor não respondeu. Tente novamente.")
       sleep 2
     end
 
+  when :cadastro
+    dados = UI::TelaCadastro.new.exibir
+    next unless dados
+
+    begin
+      conn      = Connection.new
+      resposta  = conn.cadastro(dados[:nome], dados[:cpf], dados[:senha], dados[:tipo])
+      conn.close
+
+      UI.cabecalho(pastel)
+      if resposta == :ok
+        UI.sucesso(pastel, "Cadastro realizado com sucesso!")
+      else
+        UI.erro(pastel, "CPF já cadastrado.")
+      end
+      sleep 2
+    rescue Errno::ECONNREFUSED, Errno::EAGAIN, Errno::EWOULDBLOCK, IO::TimeoutError
+      UI.cabecalho(pastel)
+      UI.erro(pastel, "Servidor não respondeu. Tente novamente.")
+      sleep 2
+    end
+    
   when :sair
     UI.limpar
     puts pastel.cyan("  Até logo!\n\n")
