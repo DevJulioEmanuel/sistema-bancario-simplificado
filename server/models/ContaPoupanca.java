@@ -5,13 +5,13 @@ public class ContaPoupanca extends Conta{
     private double rendimento;
     private static int contadorNumero = 5000;
 
-    public ContaPoupanca(Cliente titular) {
-        super(contadorNumero++, 0, titular);
+    public ContaPoupanca(Cliente titular, String senha) {
+        super(contadorNumero++, 0, titular, senha);
         this.rendimento = 0.005;
     }
 
-    public ContaPoupanca(int numero, double saldo, Cliente titular, double rendimento) {
-        super(numero, saldo, titular);
+    public ContaPoupanca(int numero, double saldo, Cliente titular, double rendimento, String senha) {
+        super(numero, saldo, titular, senha);
         this.rendimento = rendimento;
 
         if(numero >= contadorNumero){

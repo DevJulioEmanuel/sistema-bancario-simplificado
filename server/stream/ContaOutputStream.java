@@ -11,24 +11,22 @@ import java.io.OutputStream;
 
 public class ContaOutputStream extends OutputStream {
 
-    private OutputStream op;
+    private DataOutputStream dos;
     private Conta[] contas;
     private int qtd;
 
     public ContaOutputStream(Conta[] c, int qtd, OutputStream os) {
         this.contas = c;
         this.qtd = qtd;
-        this.op = os;
+        this.dos = new DataOutputStream(os);
     }
 
     public void write(Banco banco) throws IOException {
 
-        DataOutputStream opLocal = new DataOutputStream(op);
-
         contas = banco.getContas().toArray(new Conta[0]);
         qtd = contas.length;
 
-        opLocal.writeInt(qtd);
+        dos.writeInt(qtd);
 
         for (Conta conta : contas) {
             if (conta != null) {
@@ -45,30 +43,46 @@ public class ContaOutputStream extends OutputStream {
 
                 byte[] tamanhoNomeTitularBytes = conta.getTitular().getNome().getBytes("UTF-8");
                 byte[] tamanhoCPFBytes = conta.getTitular().getCpf().getBytes("UTF-8");
+                byte[] tamanhoSenhaBytes = conta.getSenha().getBytes("UTF-8");
                 int tamanhoPayload = Integer.BYTES + Integer.BYTES + tamanhoNomeTitularBytes.length + Integer.BYTES + tamanhoCPFBytes.length + Integer.BYTES + Double.BYTES + Double.BYTES;
 
-                opLocal.writeInt(tipo);
+                dos.writeInt(tipo);
 
-                opLocal.writeInt(tamanhoPayload);
+                dos.writeInt(tamanhoPayload);
 
-                opLocal.writeInt(conta.getTitular().getId());
-                opLocal.writeInt(tamanhoNomeTitularBytes.length);
-                opLocal.write(tamanhoNomeTitularBytes);
-                opLocal.writeInt(tamanhoCPFBytes.length);
-                opLocal.write(tamanhoCPFBytes);
-                opLocal.writeInt(conta.getNumero());
-                opLocal.writeDouble(conta.getSaldo());
-                opLocal.writeDouble(valor);
+                dos.writeInt(conta.getTitular().getId());
+                dos.writeInt(tamanhoNomeTitularBytes.length);
+                dos.write(tamanhoNomeTitularBytes);
+                dos.writeInt(tamanhoCPFBytes.length);
+                dos.write(tamanhoCPFBytes);
+                dos.writeInt(conta.getNumero());
+                dos.writeDouble(conta.getSaldo());
+                dos.writeDouble(valor);
 
             }
         }
 
-        opLocal.flush();
+        dos.flush();
+    }
+
+    public void writeInt(int v) throws IOException {
+        dos.writeInt(v);
+        dos.flush();
+    }
+
+    public void writeDouble(double v) throws IOException {
+        dos.writeDouble(v);
+        dos.flush();
+    }
+
+    public void writeUTF(String v) throws IOException {
+        dos.writeUTF(v);
+        dos.flush();
     }
 
     @Override
     public void write(int b) throws IOException {
         // TODO Auto-generated method stub
-        op.write(b);
+        dos.write(b);
     }
 }

@@ -15,22 +15,22 @@ public class TesteStreams {
             FileInputStream fis = new FileInputStream("contas.bin");
             ContaInputStream cis = new ContaInputStream(fis);
             cis.read(banco);
-//            for (Conta c : banco.getContas()) {
-//                if (c != null) {
-//                    System.out.println("ID: " + c.getTitular().getId());
-//                    System.out.println("Titular: " + c.getTitular().getNome());
-//                    System.out.println("CPF: " + c.getTitular().getCpf());
-//                    System.out.println("Conta Recuperada: " + c.getNumero());
-//                    System.out.println("Saldo: R$ " + c.getSaldo());
-//                    if(c instanceof ContaCorrente cc){
-//                        System.out.println("Limite: R$ " + cc.getLimite());
-//                    } else if (c instanceof ContaPoupanca cp){
-//                        System.out.println("Taxa rendimento: " + cp.getRendimento());
-//                    }
-//                    System.out.println("-------------------------");
-//                }
-//            }
-            cis.close();
+////            for (Conta c : banco.getContas()) {
+////                if (c != null) {
+////                    System.out.println("ID: " + c.getTitular().getId());
+////                    System.out.println("Titular: " + c.getTitular().getNome());
+////                    System.out.println("CPF: " + c.getTitular().getCpf());
+////                    System.out.println("Conta Recuperada: " + c.getNumero());
+////                    System.out.println("Saldo: R$ " + c.getSaldo());
+////                    if(c instanceof ContaCorrente cc){
+////                        System.out.println("Limite: R$ " + cc.getLimite());
+////                    } else if (c instanceof ContaPoupanca cp){
+////                        System.out.println("Taxa rendimento: " + cp.getRendimento());
+////                    }
+////                    System.out.println("-------------------------");
+////                }
+////            }
+//            cis.close();
 
             models.Conta[] array = banco.getContas().toArray(new models.Conta[0]);
 
@@ -41,15 +41,16 @@ public class TesteStreams {
             );
             cos.write(banco);
 
-//            Cliente c = new Cliente("Kaua", "5555555555");
-//            banco.getContas().add(new ContaCorrente(c));
-//
-//            models.Conta[] array1 = banco.getContas().toArray(new models.Conta[0]);
-//
-//            FileOutputStream fos = new FileOutputStream("contas.bin");
-//            ContaOutputStream cos1 = new ContaOutputStream(array1, array1.length, fos);
-//            cos1.write(banco);
-//            cos1.close();
+            Cliente c = new Cliente("Emanuel", "6698766666");
+            banco.getContas().add(new ContaCorrente(c));
+            banco.getContas().add(new ContaPoupanca(c));
+
+            models.Conta[] array1 = banco.getContas().toArray(new models.Conta[0]);
+
+            FileOutputStream fos = new FileOutputStream("contas.bin");
+            ContaOutputStream cos1 = new ContaOutputStream(array1, array1.length, fos);
+            cos1.write(banco);
+            cos1.close();
 
         } catch (IOException e) {
             System.err.println("Erro no processo: " + e.getMessage());
