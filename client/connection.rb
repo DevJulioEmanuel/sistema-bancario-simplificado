@@ -13,38 +13,52 @@ class Connection
     @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [TIMEOUT, 0].pack('l_2'))
   end
 
+  # ================= WRITE =================
+
   def write_int(val)
-    @socket.write([val].pack('N'))
-  end
-
-  
-
-  def write_utf(str)
-    bytes = str.encode('UTF-8').b
-    @socket.write([bytes.bytesize].pack('n'))
-    @socket.write(bytes)
+    @socket.write([val].pack('N')) # int (4 bytes, big-endian)
   end
 
   def write_double(val)
-    # 'G' é o formato float 64-bit network byte order (Big-Endian) compatível com o Java
-    @socket.write([val].pack('G')) 
+    @socket.write([val].pack('G')) # double (Java compatível)
   end
+
+  def write_utf(str)
+    bytes = str.encode('UTF-8').b
+    @socket.write([bytes.bytesize].pack('n')) # tamanho (2 bytes)
+    @socket.write(bytes)
+  end
+
+  # ================= READ =================
 
   def read_int
     bytes = @socket.read(4)
-    # Proteção: Se o Java fechar a conexão do nada, evitamos o travamento do Ruby
-    raise "Servidor encerrou a conexão inesperadamente" if bytes.nil? || bytes.bytesize < 4
+    raise "Servidor encerrou a conexão (int)" if bytes.nil? || bytes.bytesize < 4
     bytes.unpack1('N')
   end
 
   def read_double
     bytes = @socket.read(8)
-    raise "Servidor encerrou a conexão inesperadamente" if bytes.nil? || bytes.bytesize < 8
+    raise "Servidor encerrou a conexão (double)" if bytes.nil? || bytes.bytesize < 8
     bytes.unpack1('G')
   end
 
+  def read_utf
+    tamanho_bytes = @socket.read(2)
+    raise "Erro ao ler UTF (tamanho)" if tamanho_bytes.nil? || tamanho_bytes.bytesize < 2
+
+    tamanho = tamanho_bytes.unpack1('n')
+    dados = @socket.read(tamanho)
+
+    raise "Erro ao ler UTF (dados)" if dados.nil? || dados.bytesize < tamanho
+
+    dados.force_encoding('UTF-8')
+  end
+
+  # ================= OPERAÇÕES =================
+
   def cadastro(nome, cpf, senha, tipo)
-    write_int(1)         # op = 1 (Cadastro)
+    write_int(1)
     write_utf(nome)
     write_utf(cpf)
     write_utf(senha)
@@ -55,7 +69,7 @@ class Connection
   end
 
   def login(cpf, senha, tipo)
-    write_int(2)         # op = 2 (Login)
+    write_int(2)
     write_utf(cpf)
     write_utf(senha)
     write_int(tipo)
@@ -64,11 +78,11 @@ class Connection
     return :erro if resposta != 0
 
     contas = Protocol.read_contas(@socket)
-    return contas.first
+    contas.first
   end
 
   def depositar(numero_conta, valor)
-    write_int(4)             # op = 4 (Depósito)
+    write_int(4)
     write_int(numero_conta)
     write_double(valor)
 
@@ -77,7 +91,7 @@ class Connection
   end
 
   def sacar(numero_conta, valor)
-    write_int(3)             # op = 3 (Saque)
+    write_int(3)
     write_int(numero_conta)
     write_double(valor)
 
@@ -90,7 +104,7 @@ class Connection
   end
 
   def transferir(num_origem, num_destino, valor)
-    write_int(5)             # op = 5 (Transferir)
+    write_int(5)
     write_int(num_origem)
     write_int(num_destino)
     write_double(valor)
@@ -105,26 +119,11 @@ class Connection
     end
   end
 
-  def projetar_rendimento(numero_conta, meses)
-    write_int(8)             # op = 8 (Projetar Rendimento)
-    write_int(numero_conta)
-    write_int(meses)
-
-    resposta = read_int
-    if resposta == 0
-      # Sucesso! O Java nos mandou um 0 e logo em seguida o valor do rendimento (Double)
-      valor_rendimento = read_double
-      return { status: :ok, valor: valor_rendimento }
-    else
-      return { status: :erro }
-    end
-  end
-
   def pagar(numero_conta, valor, descricao)
-    write_int(6)             # op = 6 (Pagar)
+    write_int(6)
     write_int(numero_conta)
     write_double(valor)
-    write_utf(descricao)     # Envia a string da descrição
+    write_utf(descricao)
 
     resposta = read_int
     case resposta
@@ -134,6 +133,41 @@ class Connection
     else :erro
     end
   end
+
+  def projetar_rendimento(numero_conta, meses)
+    write_int(7)
+    write_int(numero_conta)
+    write_int(meses)
+
+    resposta = read_int
+    if resposta == 0
+      valor = read_double
+      { status: :ok, valor: valor }
+    else
+      { status: :erro }
+    end
+  end
+
+  # ⭐ NOVA FUNCIONALIDADE: EXTRATO
+
+  def extrato(numero_conta)
+    write_int(8)
+    write_int(numero_conta)
+
+    status = read_int
+    return nil if status == -1
+
+    tamanho = read_int
+    linhas = []
+
+    tamanho.times do
+      linhas << read_utf
+    end
+
+    linhas
+  end
+
+  # ================= FINAL =================
 
   def close
     @socket.close rescue nil

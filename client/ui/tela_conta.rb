@@ -1,211 +1,262 @@
+# tela_conta.rb
 require 'pastel'
 require 'tty-prompt'
 require_relative 'banner'
-# Certifique-se de que a Connection está acessível aqui. Como você a chamou no main.rb, 
-# ela provavelmente já está na memória, mas se der erro de classe não encontrada, 
-# adicione: require_relative 'connection'
 
 module UI
   class TelaConta
+    MENU_BASE = [
+      { label: "Depositar",          key: :depositar   },
+      { label: "Sacar",              key: :sacar       },
+      { label: "Transferir",         key: :transferir  },
+      { label: "Ver Extrato",        key: :extrato     },
+      { label: "Sair (Logout)",      key: :sair        },
+    ].freeze
+
     def initialize
-      @pastel = Pastel.new
-      @prompt = TTY::Prompt.new
+      @prompt = TTY::Prompt.new(interrupt: :exit)
     end
 
+    # ── Tela principal ─────────────────────────────────────────────────────────
     def exibir(conta)
       loop do
-        UI.cabecalho(@pastel)
+        _renderizar_dashboard(conta)
 
-        puts @pastel.yellow("  ┌──────────────────────────────────────────┐")
-        puts @pastel.yellow("  │               MINHA CONTA                │")
-        puts @pastel.yellow("  └──────────────────────────────────────────┘")
-        puts
+        opcoes = _opcoes_menu(conta)
+        opcao  = @prompt.select(
+          UI.margem + UI.secundario("O que deseja fazer?"),
+          opcoes,
+          cycle: true,
+          per_page: opcoes.size
+        )
 
-        puts @pastel.bright_black("  TITULAR")
-        UI.divisor(@pastel)
-        campo("Nome",  conta.titular.nome)
-        campo("CPF",   conta.titular.cpf)
-        puts
-
-        puts @pastel.bright_black("  CONTA")
-        UI.divisor(@pastel)
-        campo("Tipo",   @pastel.blue(conta.tipo_nome))
-        campo("Número", conta.numero.to_s)
-        campo("Saldo",  @pastel.green("R$ #{'%.2f' % conta.saldo}"))
-
-        if conta.corrente?
-          campo("Limite",     "R$ #{'%.2f' % conta.limite}")
-        else
-          campo("Rendimento", "#{'%.3f' % (conta.rendimento * 100)}% a.m.")
-        end
-
-        puts
-        UI.divisor(@pastel)
-        puts
-
-        opcao = @prompt.select(@pastel.bright_black("  O que deseja fazer?"), cycle: true) do |menu|
-          menu.choice "Depositar", :depositar
-          menu.choice "Sacar", :sacar
-          menu.choice "Transferir", :transferir
-          menu.choice "Pagar Boleto/Conta", :pagar if conta.corrente?
-          menu.choice "Projetar Rendimento", :projetar if conta.poupanca?
-          menu.choice "Sair (Logout)", :sair
-        end
-
-        case opcao
-        when :depositar
-          valor = @prompt.ask(@pastel.cyan("  Valor do depósito (R$): "), convert: :float)
-          
-          if valor && valor > 0
-            begin
-              conn = Connection.new
-              resultado = conn.depositar(conta.numero, valor)
-              conn.close
-
-              if resultado == :ok
-                conta.saldo += valor # Atualiza o saldo na tela automaticamente
-                UI.sucesso(@pastel, "Depósito de R$ #{'%.2f' % valor} realizado!")
-              else
-                UI.erro(@pastel, "Falha ao realizar depósito.")
-              end
-            rescue
-              UI.erro(@pastel, "Erro de comunicação com o servidor.")
-            end
-            sleep 2
-          else
-            UI.erro(@pastel, "Valor inválido!")
-            sleep 1
-          end
-
-        when :sacar
-          valor = @prompt.ask(@pastel.cyan("  Valor do saque (R$): "), convert: :float)
-          
-          if valor && valor > 0
-            begin
-              conn = Connection.new
-              resultado = conn.sacar(conta.numero, valor)
-              conn.close
-
-              if resultado == :ok
-                conta.saldo -= valor # Atualiza o saldo na tela automaticamente
-                UI.sucesso(@pastel, "Saque de R$ #{'%.2f' % valor} realizado!")
-              elsif resultado == :saldo_insuficiente
-                UI.erro(@pastel, "Saldo ou Limite insuficiente!")
-              else
-                UI.erro(@pastel, "Falha ao realizar saque.")
-              end
-            rescue
-              UI.erro(@pastel, "Erro de comunicação com o servidor.")
-            end
-            sleep 2
-          else
-            UI.erro(@pastel, "Valor inválido!")
-            sleep 1
-          end
-        
-        when :transferir
-          destino = @prompt.ask(@pastel.cyan("  Número da conta destino: "), convert: :integer)
-          valor = @prompt.ask(@pastel.cyan("  Valor da transferência (R$): "), convert: :float)
-
-          if destino && valor && valor > 0
-            if destino == conta.numero
-              UI.erro(@pastel, "Você não pode transferir para si mesmo!")
-              sleep 2
-              next # Pula para o próximo ciclo do loop sem fazer requisição
-            end
-
-            begin
-              conn = Connection.new
-              resultado = conn.transferir(conta.numero, destino, valor)
-              conn.close
-
-              case resultado
-              when :ok
-                conta.saldo -= valor # Atualiza o saldo na tela
-                UI.sucesso(@pastel, "Transferência de R$ #{'%.2f' % valor} realizada!")
-              when :destino_invalido
-                UI.erro(@pastel, "Conta destino (#{destino}) não existe!")
-              when :saldo_insuficiente
-                UI.erro(@pastel, "Saldo ou Limite insuficiente para transferência!")
-              else
-                UI.erro(@pastel, "Falha ao realizar transferência.")
-              end
-            rescue => e
-              UI.erro(@pastel, "Erro de comunicação: #{e.message}")
-            end
-            sleep 2
-          else
-            UI.erro(@pastel, "Dados inválidos!")
-            sleep 1
-          end
-
-        when :pagar
-          descricao = @prompt.ask(@pastel.cyan("  Descrição (ex: Conta de Luz): "), required: true)
-          valor = @prompt.ask(@pastel.cyan("  Valor do pagamento (R$): "), convert: :float)
-
-          if valor && valor > 0
-            begin
-              conn = Connection.new
-              resultado = conn.pagar(conta.numero, valor, descricao)
-              conn.close
-
-              case resultado
-              when :ok
-                conta.saldo -= valor # Atualiza o saldo na tela
-                UI.sucesso(@pastel, "Pagamento de R$ #{'%.2f' % valor} (#{descricao}) realizado!")
-              when :saldo_insuficiente
-                UI.erro(@pastel, "Saldo ou Limite insuficiente para o pagamento!")
-              else
-                UI.erro(@pastel, "Falha ao realizar pagamento.")
-              end
-            rescue => e
-              UI.erro(@pastel, "Erro de comunicação: #{e.message}")
-            end
-            sleep 2
-          else
-            UI.erro(@pastel, "Valor inválido!")
-            sleep 1
-          end
-
-        when :projetar
-          meses = @prompt.ask(@pastel.cyan("  Quantidade de meses: "), convert: :integer)
-          
-          if meses && meses > 0
-            begin
-              conn = Connection.new
-              resultado = conn.projetar_rendimento(conta.numero, meses)
-              conn.close
-
-              if resultado[:status] == :ok
-                puts
-                UI.sucesso(@pastel, "Em #{meses} meses, o saldo projetado é:")
-                puts @pastel.green("  R$ #{'%.2f' % resultado[:valor]}")
-                puts
-                @prompt.keypress(@pastel.bright_black("  Pressione qualquer tecla para continuar..."))
-              else
-                UI.erro(@pastel, "Falha ao projetar rendimento.")
-                sleep 2
-              end
-            rescue => e
-              UI.erro(@pastel, "Erro de comunicação: #{e.message}")
-              sleep 2
-            end
-          else
-            UI.erro(@pastel, "Quantidade de meses inválida!")
-            sleep 1
-          end
-
-        when :sair
-          break # Sai do loop e volta para o menu principal
-        end
+        break if opcao == :sair
+        _despachar(opcao, conta)
       end
     end
 
     private
 
-    def campo(label, valor)
-      l = @pastel.bright_black("  %-10s: " % label)
-      puts "#{l}#{valor}"
+    # ── Dashboard ──────────────────────────────────────────────────────────────
+    def _renderizar_dashboard(conta)
+      UI.cabecalho
+      UI.titulo_secao("MINHA CONTA")
+
+      UI.label_secao("TITULAR")
+      UI.campo("Nome",  UI.primario(conta.titular.nome))
+      UI.campo("CPF",   UI.secundario(conta.titular.cpf))
+      UI.espaco
+
+      UI.label_secao("MOVIMENTAÇÃO")
+      UI.campo("Número", conta.numero.to_s)
+      UI.campo("Tipo",   _badge_tipo(conta))
+      UI.espaco
+
+      # Saldo em destaque — principal informação da tela
+      _bloco_saldo(conta)
+      UI.espaco
+      UI.linha_fina
+      UI.espaco
+    end
+
+    def _bloco_saldo(conta)
+      m = UI.margem
+      puts m + UI.secundario("  SALDO DISPONÍVEL".ljust(UI::LARGURA_UI))
+      puts m + UI.valor_pos("  R$ #{'%.2f' % conta.saldo}".ljust(UI::LARGURA_UI))
+
+      if conta.corrente?
+        puts m + UI.secundario("  Limite: R$ #{'%.2f' % conta.limite}")
+      else
+        puts m + UI.secundario("  Rendimento: #{'%.3f' % (conta.rendimento * 100)}% a.m.")
+      end
+    end
+
+    def _badge_tipo(conta)
+      if conta.corrente?
+        UI.badge("CORRENTE", cor: :blue)
+      else
+        UI.badge("POUPANÇA", cor: :green)
+      end
+    end
+
+    def _opcoes_menu(conta)
+      extras = []
+      extras << { name: "Pagar Boleto / Conta", value: :pagar }    if conta.corrente?
+      extras << { name: "Projetar Rendimento",  value: :projetar }  if conta.poupanca?
+
+      base = MENU_BASE.map { |o| { name: o[:label], value: o[:key] } }
+      # Injeta extras antes de "Ver Extrato"
+      idx = base.index { |o| o[:value] == :extrato } || -1
+      base.insert(idx, *extras)
+    end
+
+    # ── Dispatcher ─────────────────────────────────────────────────────────────
+    def _despachar(opcao, conta)
+      case opcao
+      when :depositar   then _depositar(conta)
+      when :sacar       then _sacar(conta)
+      when :transferir  then _transferir(conta)
+      when :pagar       then _pagar(conta)
+      when :projetar    then _projetar(conta)
+      when :extrato     then _extrato(conta)
+      end
+    end
+
+    # ── Operações ──────────────────────────────────────────────────────────────
+    def _depositar(conta)
+      valor = _pedir_valor("Valor do depósito")
+      return unless valor
+
+      _com_conexao do |conn|
+        resultado = conn.depositar(conta.numero, valor)
+        if resultado == :ok
+          conta.saldo += valor
+          UI.sucesso(nil, "Depósito de #{_fmt(valor)} realizado com sucesso.")
+        else
+          UI.erro(nil, "Não foi possível realizar o depósito.")
+        end
+      end
+      sleep 2
+    end
+
+    def _sacar(conta)
+      valor = _pedir_valor("Valor do saque")
+      return unless valor
+
+      _com_conexao do |conn|
+        case conn.sacar(conta.numero, valor)
+        when :ok
+          conta.saldo -= valor
+          UI.sucesso(nil, "Saque de #{_fmt(valor)} efetuado.")
+        when :saldo_insuficiente
+          UI.erro(nil, "Saldo ou limite insuficiente.")
+        else
+          UI.erro(nil, "Falha ao realizar o saque.")
+        end
+      end
+      sleep 2
+    end
+
+    def _transferir(conta)
+      destino = @prompt.ask(UI.secundario("  Conta destino     : "), convert: :integer, required: true)
+      valor   = _pedir_valor("Valor da transferência")
+      return unless valor
+
+      if destino == conta.numero
+        UI.erro(nil, "Não é possível transferir para a própria conta.")
+        sleep 2
+        return
+      end
+
+      _com_conexao do |conn|
+        case conn.transferir(conta.numero, destino, valor)
+        when :ok
+          conta.saldo -= valor
+          UI.sucesso(nil, "Transferência de #{_fmt(valor)} para conta #{destino} realizada.")
+        when :destino_invalido
+          UI.erro(nil, "Conta destino (#{destino}) não encontrada.")
+        when :saldo_insuficiente
+          UI.erro(nil, "Saldo ou limite insuficiente para a transferência.")
+        else
+          UI.erro(nil, "Falha ao realizar a transferência.")
+        end
+      end
+      sleep 2
+    end
+
+    def _pagar(conta)
+      descricao = @prompt.ask(UI.secundario("  Descrição         : "), required: true)
+      valor     = _pedir_valor("Valor do pagamento")
+      return unless valor
+
+      _com_conexao do |conn|
+        case conn.pagar(conta.numero, valor, descricao)
+        when :ok
+          conta.saldo -= valor
+          UI.sucesso(nil, "Pagamento de #{_fmt(valor)} — #{descricao} — realizado.")
+        when :saldo_insuficiente
+          UI.erro(nil, "Saldo ou limite insuficiente para o pagamento.")
+        else
+          UI.erro(nil, "Falha ao processar o pagamento.")
+        end
+      end
+      sleep 2
+    end
+
+    def _projetar(conta)
+      meses = @prompt.ask(UI.secundario("  Número de meses   : "), convert: :integer, required: true)
+      return UI.erro(nil, "Número de meses inválido.") unless meses&.positive?
+
+      _com_conexao do |conn|
+        resultado = conn.projetar_rendimento(conta.numero, meses)
+        if resultado[:status] == :ok
+          UI.espaco
+          UI.label_secao("PROJEÇÃO DE RENDIMENTO")
+          UI.campo("Período",         "#{meses} meses")
+          UI.campo("Saldo atual",     _fmt(conta.saldo))
+          UI.campo("Saldo projetado", UI.valor_pos("R$ #{'%.2f' % resultado[:valor]}"))
+          UI.espaco
+          @prompt.keypress(UI.margem + UI.secundario("  Pressione qualquer tecla para continuar..."))
+        else
+          UI.erro(nil, "Não foi possível calcular a projeção.")
+          sleep 2
+        end
+      end
+    end
+
+    def _extrato(conta)
+      _com_conexao do |conn|
+        linhas = conn.extrato(conta.numero)
+
+        if linhas.nil?
+          UI.erro(nil, "Conta não encontrada.")
+          sleep 2
+          next
+        end
+
+        UI.cabecalho
+        UI.titulo_secao("EXTRATO DE MOVIMENTAÇÕES")
+        UI.label_secao("Conta #{conta.numero}  •  #{conta.titular.nome}")
+
+        if linhas.empty?
+          UI.espaco
+          UI.info("Nenhuma movimentação registrada.")
+        else
+          linhas.each { |l| puts UI.margem + "  " + l }
+        end
+
+        UI.espaco
+        UI.linha_fina
+        UI.espaco
+        @prompt.keypress(UI.margem + UI.secundario("  Pressione qualquer tecla para voltar..."))
+      end
+    end
+
+    # ── Helpers ────────────────────────────────────────────────────────────────
+
+    def _pedir_valor(label)
+      valor = @prompt.ask(UI.secundario("  #{label.ljust(22)}: R$ "), convert: :float, required: true)
+      if valor.nil? || valor <= 0
+        UI.erro(nil, "Valor inválido.")
+        sleep 1
+        return nil
+      end
+      valor
+    end
+
+    # Garante que a conexão sempre fecha, mesmo com exceção
+    def _com_conexao
+      conn = Connection.new
+      yield conn
+    rescue StandardError => e
+      UI.erro(nil, "Erro de comunicação: #{e.message}")
+      sleep 2
+    ensure
+      conn&.close
+    end
+
+    def _fmt(valor)
+      UI.primario("R$ #{'%.2f' % valor}")
     end
   end
 end
