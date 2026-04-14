@@ -21,7 +21,6 @@ class NotificacaoListener
         next unless Session.logado?
 
         Session.add_notificacao(mensagem)
-        # Aciona o callback de UI se houver um registrado
         Session.notificacao_callback&.call(mensagem)
       end
     end

@@ -18,14 +18,7 @@ prompt = TTY::Prompt.new
 
 loop do
   UI.cabecalho(pastel)
-  notifs = Session.pegar_notificacoes
-  unless notifs.empty?
-    puts
-    notifs.each do |msg|
-      puts pastel.yellow("📢 #{msg}")
-    end
-    puts
-  end
+  
   opcao = prompt.select(pastel.bright_black("  O que deseja fazer?"), cycle: true) do |menu|
     menu.choice "Login",       :login
     menu.choice "Criar conta", :cadastro

@@ -19,7 +19,6 @@ module Protocol
 
     quantidade.times.map do
       tipo     = read_int(io)
-      _payload = read_int(io)
 
       id    = read_int(io)
       nome  = read_string(io)

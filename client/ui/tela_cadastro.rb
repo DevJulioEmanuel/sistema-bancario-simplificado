@@ -32,7 +32,6 @@ module UI
         end
       end
 
-      # Preview da conta que será criada
       UI.espaco
       UI.linha_fina
       UI.espaco

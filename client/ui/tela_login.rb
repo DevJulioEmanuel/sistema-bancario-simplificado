@@ -1,4 +1,3 @@
-# tela_login.rb
 require 'tty-prompt'
 require 'pastel'
 require_relative 'banner'

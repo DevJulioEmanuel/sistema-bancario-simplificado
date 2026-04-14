@@ -4,8 +4,8 @@ require 'timeout'
 require_relative 'protocol'
 
 class Connection
-  NGROK_HOST = '10.10.249.165'
-  NGROK_PORT = 7896
+  NGROK_HOST = '10.10.255.63'
+  NGROK_PORT = 7897
   TIMEOUT    = 5  
 
   def initialize(host: NGROK_HOST, port: NGROK_PORT)
@@ -13,23 +13,21 @@ class Connection
     @socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVTIMEO, [TIMEOUT, 0].pack('l_2'))
   end
 
-  # ================= WRITE =================
 
   def write_int(val)
-    @socket.write([val].pack('N')) # int (4 bytes, big-endian)
+    @socket.write([val].pack('N')) 
   end
 
   def write_double(val)
-    @socket.write([val].pack('G')) # double (Java compatível)
+    @socket.write([val].pack('G')) 
   end
 
   def write_utf(str)
     bytes = str.encode('UTF-8').b
-    @socket.write([bytes.bytesize].pack('n')) # tamanho (2 bytes)
+    @socket.write([bytes.bytesize].pack('n')) 
     @socket.write(bytes)
   end
 
-  # ================= READ =================
 
   def read_int
     bytes = @socket.read(4)
@@ -55,7 +53,6 @@ class Connection
     dados.force_encoding('UTF-8')
   end
 
-  # ================= OPERAÇÕES =================
 
   def cadastro(nome, cpf, senha, tipo)
     write_int(1)
@@ -148,7 +145,6 @@ class Connection
     end
   end
 
-  # ⭐ NOVA FUNCIONALIDADE: EXTRATO
 
   def extrato(numero_conta)
     write_int(8)
@@ -167,7 +163,6 @@ class Connection
     linhas
   end
 
-  # ================= FINAL =================
 
   def close
     @socket.close rescue nil

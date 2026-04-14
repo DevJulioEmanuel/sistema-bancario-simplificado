@@ -18,7 +18,6 @@ module UI
       @prompt = TTY::Prompt.new(interrupt: :exit)
     end
 
-    # ── Tela principal ─────────────────────────────────────────────────────────
     def exibir(conta)
       cursor = TTY::Cursor
 
@@ -61,7 +60,6 @@ module UI
       26
     end
 
-    # ── Dashboard ──────────────────────────────────────────────────────────────
     def _renderizar_dashboard(conta)
       UI.cabecalho
       UI.titulo_secao("MINHA CONTA")
@@ -76,7 +74,6 @@ module UI
       UI.campo("Tipo",   _badge_tipo(conta))
       UI.espaco
 
-      # Saldo em destaque — principal informação da tela
       _bloco_saldo(conta)
       UI.espaco
       UI.linha_fina
@@ -114,7 +111,6 @@ module UI
       base.insert(idx, *extras)
     end
 
-    # ── Dispatcher ─────────────────────────────────────────────────────────────
     def _despachar(opcao, conta)
       case opcao
       when :depositar   then _depositar(conta)
@@ -126,7 +122,6 @@ module UI
       end
     end
 
-    # ── Operações ──────────────────────────────────────────────────────────────
     def _depositar(conta)
       valor = _pedir_valor("Valor do depósito")
       return unless valor
@@ -257,7 +252,6 @@ module UI
       end
     end
 
-    # ── Helpers ────────────────────────────────────────────────────────────────
 
     def _pedir_valor(label)
       valor = @prompt.ask(UI.secundario("  #{label.ljust(22)}: R$ "), convert: :float, required: true)
@@ -269,7 +263,6 @@ module UI
       valor
     end
 
-    # Garante que a conexão sempre fecha, mesmo com exceção
     def _com_conexao
       conn = Connection.new
       yield conn
