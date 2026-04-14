@@ -4,7 +4,7 @@ require 'timeout'
 require_relative 'protocol'
 
 class Connection
-  NGROK_HOST = 'localhost'
+  NGROK_HOST = '10.10.255.63'
   NGROK_PORT = 7896
   TIMEOUT    = 5  
 
@@ -111,7 +111,7 @@ class Connection
 
     resposta = read_int
     case resposta
-    when 0  then :ok
+    when 0  then { status: :ok, nome_destino: @in.read_utf }
     when -1 then :origem_invalida
     when -2 then :destino_invalido
     when -3 then :saldo_insuficiente

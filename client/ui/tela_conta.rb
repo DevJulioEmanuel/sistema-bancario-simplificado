@@ -173,19 +173,20 @@ module UI
       end
 
       _com_conexao do |conn|
-        case conn.transferir(conta.numero, destino, valor)
-        when :ok
-          conta.saldo -= valor
-          UI.sucesso(nil, "Transferência de #{_fmt(valor)} para conta #{destino} realizada.")
+        resultado = conn.transferir(conta.numero, destino, valor)
+        case resultado
         when :destino_invalido
           UI.erro(nil, "Conta destino (#{destino}) não encontrada.")
         when :saldo_insuficiente
           UI.erro(nil, "Saldo ou limite insuficiente para a transferência.")
-        else
+        when :erro
           UI.erro(nil, "Falha ao realizar a transferência.")
+        else
+          conta.saldo -= valor
+          UI.sucesso(nil, "Transferência de #{_fmt(valor)} para #{resultado[:nome_destino]} realizada.")
         end
       end
-      sleep 2
+      sleep 4
     end
 
     def _pagar(conta)
