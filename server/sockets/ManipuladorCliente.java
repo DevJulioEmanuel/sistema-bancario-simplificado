@@ -31,6 +31,7 @@ public class ManipuladorCliente {
         int op = in.readInt();
 
         switch (op){
+
             // Cadastro
             case 1:
                 try {
@@ -57,8 +58,6 @@ public class ManipuladorCliente {
                     String cpf = in.readUTF();
                     String senha = in.readUTF();
                     int tipo = in.readInt();
-
-                    System.out.println("DEBUG LOGIN - cpf: " + cpf + " senha: " + senha + " tipo: " + tipo);
 
                     List<Conta> contas = clienteService.listarContas(cpf);
                     Conta encontada = null;
@@ -89,6 +88,7 @@ public class ManipuladorCliente {
                 } catch (IllegalArgumentException e){
                     out.writeInt(-1);
                 }
+
                 break;
 
             // Saque
@@ -148,6 +148,7 @@ public class ManipuladorCliente {
 
                 if(contaService.transferir(origem, destino, valor)){
                     out.writeInt(0);
+                    out.writeUTF(destino.getTitular().getNome());
                 } else {
                     out.writeInt(-3);
                 }
@@ -174,9 +175,8 @@ public class ManipuladorCliente {
 
                 break;
 
-
             // Projetar rendimento
-            case 8:
+            case 7:
                 int numeroRendimento = in.readInt();
                 int meses = in.readInt();
 
@@ -191,10 +191,30 @@ public class ManipuladorCliente {
                 }
 
                 break;
+
+            // Extrato
+            case 8:
+                    int numContaExtrato = in.readInt();
+
+                    Conta contaAlvo = contaService.buscarConta(numContaExtrato);
+
+                    if (contaAlvo == null) {
+                        out.writeInt(-1);
+                    } else {
+                        List<String> historico = contaService.consultarExtrato(numContaExtrato);
+
+                        out.writeInt(0);
+                        out.writeInt(historico.size());
+
+                        for (String linha : historico) {
+                            out.writeUTF(linha);
+                        }
+                    }
+
+                break;
         }
 
     }
-
 
     public void setOut(ContaOutputStream out) {
         this.out = out;

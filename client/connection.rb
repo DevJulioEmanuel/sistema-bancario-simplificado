@@ -4,7 +4,7 @@ require 'timeout'
 require_relative 'protocol'
 
 class Connection
-  NGROK_HOST = '10.10.255.63'
+  NGROK_HOST = 'localhost'
   NGROK_PORT = 7896
   TIMEOUT    = 5  
 

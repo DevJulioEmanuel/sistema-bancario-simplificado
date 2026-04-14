@@ -2,9 +2,25 @@ package service;
 
 import models.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 public class ContaService {
 
     private final Banco banco;
+    private final Map<Integer, List<String>> repositorioExtratos = new HashMap<>();
+
+    private void registrar(int numeroConta, String mensagem) {
+        repositorioExtratos
+                .computeIfAbsent(numeroConta, k -> new ArrayList<>())
+                .add(mensagem);
+    }
+
+    public List<String> consultarExtrato(int numeroConta) {
+        return repositorioExtratos.getOrDefault(numeroConta, new ArrayList<>());
+    }
 
     public ContaService(Banco banco) {
         this.banco = banco;
@@ -45,8 +61,20 @@ public class ContaService {
     }
 
     public synchronized boolean transferir(Conta origem, Conta destino, double valor){
-        if(sacar(origem, valor)){
+        double imposto = 0;
+
+        if (origem instanceof ContaCorrente cc) {
+            imposto = cc.calcularImposto();
+        }
+
+        double totalADebitar = valor + imposto;
+
+        if(sacar(origem, totalADebitar)){
             depositar(destino, valor);
+
+            registrar(origem.getNumero(), "Transferência enviada: -R$ " + valor + " (Imposto: R$ " + imposto + ")");
+            registrar(destino.getNumero(), "Transferência recebida: +R$ " + valor + " de " + origem.getTitular().getNome());
+
             return true;
         }
 
@@ -56,6 +84,8 @@ public class ContaService {
     public synchronized boolean pagar(Conta conta, double valor, String descricao){
         if(conta instanceof ContaCorrente cc){
             if (sacar(cc, valor)){
+                registrar(conta.getNumero(), "Pagamento: " + descricao + " | Valor: -R$ " + valor);
+
                 return true;
             }
         } else {
