@@ -15,12 +15,15 @@ public class ClienteService {
         this.banco = banco;
     }
 
-    public synchronized void cadastrar(Cliente novo){
-        if(buscarPorCpf(novo.getCpf()) != null){
-            throw new IllegalArgumentException("Cliente já cadastrado");
+    public synchronized Cliente salvarOuObter(String nome, String cpf){
+        Cliente existente = buscarPorCpf(cpf);
+        if(existente != null){
+            return existente;
         }
 
+        Cliente novo = new Cliente(nome, cpf);
         this.banco.getClientes().add(novo);
+        return novo;
     }
 
     public synchronized Cliente buscarPorCpf(String cpf){

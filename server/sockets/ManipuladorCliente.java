@@ -40,11 +40,9 @@ public class ManipuladorCliente {
                     String senha = in.readUTF();
                     int tipo = in.readInt();
 
-                    Cliente novo = new Cliente(nome, cpf);
+                    Cliente c = clienteService.salvarOuObter(nome, cpf);
 
-                    clienteService.cadastrar(novo);
-
-                    contaService.abrirConta(novo, senha, tipo);
+                    contaService.abrirConta(c, senha, tipo);
 
                     out.writeInt(0);
                 } catch (IllegalArgumentException e){

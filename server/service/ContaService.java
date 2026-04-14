@@ -27,17 +27,20 @@ public class ContaService {
     }
 
     public synchronized boolean abrirConta(Cliente cliente, String senha, int tipo){
-        Conta nova;
 
-        if(tipo == 1){
-            nova = new ContaCorrente(cliente, senha);
-        } else{
-            nova = new ContaPoupanca(cliente, senha);
+        for (Conta c : banco.getContas()) {
+            if (c.getTitular().getCpf().equals(cliente.getCpf())) {
+                if ((tipo == 1 && c instanceof ContaCorrente) ||
+                        (tipo == 2 && c instanceof ContaPoupanca)) {
+                    throw new IllegalArgumentException("Tipo de conta já existente para este CPF.");
+                }
+            }
         }
 
-        synchronized (banco) {
-            banco.getContas().add(nova);
-        }
+        Conta nova = (tipo == 1) ? new ContaCorrente(cliente, senha) : new ContaPoupanca(cliente, senha);
+        banco.getContas().add(nova);
+
+        registrar(nova.getNumero(), "Conta aberta em 2026-04-13.");
 
         return true;
     }
