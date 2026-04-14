@@ -21,7 +21,6 @@ public class ContaInputStream extends InputStream {
 
             for(int i = 0; i < qtd; i++) {
                 int tipo = dis.readInt();
-                int payload = dis.readInt();
                 int id = dis.readInt();
 
                 int tamanhoNome = dis.readInt();

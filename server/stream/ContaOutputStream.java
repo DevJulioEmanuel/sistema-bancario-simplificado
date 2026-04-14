@@ -43,11 +43,8 @@ public class ContaOutputStream extends OutputStream {
                 byte[] tamanhoNomeTitularBytes = conta.getTitular().getNome().getBytes("UTF-8");
                 byte[] tamanhoCPFBytes = conta.getTitular().getCpf().getBytes("UTF-8");
                 byte[] tamanhoSenhaBytes = conta.getSenha().getBytes("UTF-8");
-                int tamanhoPayload = Integer.BYTES + Integer.BYTES + tamanhoNomeTitularBytes.length + Integer.BYTES + tamanhoCPFBytes.length + Integer.BYTES + Double.BYTES + Integer.BYTES + tamanhoSenhaBytes.length + Double.BYTES;
 
                 dos.writeInt(tipo);
-
-                dos.writeInt(tamanhoPayload);
 
                 dos.writeInt(conta.getTitular().getId());
                 dos.writeInt(tamanhoNomeTitularBytes.length);

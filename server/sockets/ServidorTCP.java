@@ -36,7 +36,7 @@ public class ServidorTCP {
 
         try {
             System.out.println("Servidor iniciado");
-            int serverPort = 7896;
+            int serverPort = 7897;
             ServerSocket listenSocket = new ServerSocket(serverPort);
             while (true) {
                 Socket clientSocket = listenSocket.accept();
@@ -113,7 +113,7 @@ class Connection extends Thread {
         } finally {
             try {
                 clientSocket.close();
-            } catch (IOException e) { /* ... */ }
+            } catch (IOException e) { }
         }
 
     }

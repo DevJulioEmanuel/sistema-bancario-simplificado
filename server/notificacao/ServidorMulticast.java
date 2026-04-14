@@ -56,7 +56,7 @@ public class ServidorMulticast {
                 ds.send(pkg);
                 System.out.println("[SERVIDOR] " + mensagem);
 
-                Thread.sleep(60000);
+                Thread.sleep(15000);
             }
 
         } catch (Exception e) {

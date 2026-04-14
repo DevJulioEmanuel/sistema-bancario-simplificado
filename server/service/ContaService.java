@@ -65,14 +65,16 @@ public class ContaService {
 
     public synchronized boolean transferir(Conta origem, Conta destino, double valor){
         double imposto = 0;
+        double limite = 0;
 
         if (origem instanceof ContaCorrente cc) {
             imposto = cc.calcularImposto();
+            limite = cc.getLimite();
         }
 
         double totalADebitar = valor + imposto;
 
-        if(sacar(origem, totalADebitar)){
+        if(sacar(origem, totalADebitar) && valor <= limite){
             depositar(destino, valor);
 
             registrar(origem.getNumero(), "Transferência enviada: -R$ " + valor + " (Imposto: R$ " + imposto + ")");
