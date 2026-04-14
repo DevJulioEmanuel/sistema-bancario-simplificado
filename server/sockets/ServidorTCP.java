@@ -2,6 +2,7 @@ package sockets;
 
 import models.Banco;
 import models.Conta;
+import notificacao.ServidorMulticast;
 import service.ClienteService;
 import service.ContaService;
 import stream.ContaInputStream;
@@ -12,6 +13,10 @@ import java.io.*;
 
 public class ServidorTCP {
     public static void main(String args[]) {
+
+        new Thread(() -> {
+            ServidorMulticast.anunciador();
+        }).start();
 
         Banco banco = new Banco();
         File f = new File("contas.bin");
