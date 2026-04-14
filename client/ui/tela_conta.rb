@@ -2,6 +2,7 @@
 require 'pastel'
 require 'tty-prompt'
 require_relative 'banner'
+require_relative '../session'
 
 module UI
   class TelaConta
@@ -19,6 +20,19 @@ module UI
 
     # ── Tela principal ─────────────────────────────────────────────────────────
     def exibir(conta)
+      cursor = TTY::Cursor
+
+      Session.notificacao_callback = ->(msg) {
+        Thread.new do
+          $stdout.print cursor.save
+          $stdout.print cursor.move_to(0, _linha_notif)
+          $stdout.print "\e[2K"
+          $stdout.print UI.margem + UI.secundario("📢 #{msg}")
+          $stdout.print cursor.restore
+          $stdout.flush
+        end
+      }
+
       loop do
         _renderizar_dashboard(conta)
 
@@ -30,12 +44,22 @@ module UI
           per_page: opcoes.size
         )
 
-        break if opcao == :sair
+        if opcao == :sair
+          Session.logout
+          break
+        end
+
         _despachar(opcao, conta)
       end
+    ensure
+      Session.notificacao_callback = nil
     end
 
     private
+
+    def _linha_notif
+      26
+    end
 
     # ── Dashboard ──────────────────────────────────────────────────────────────
     def _renderizar_dashboard(conta)

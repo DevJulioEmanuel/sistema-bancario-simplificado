@@ -7,13 +7,25 @@ require_relative 'ui/banner'
 require_relative 'ui/tela_login'
 require_relative 'ui/tela_cadastro'
 require_relative 'ui/tela_conta'
+require_relative 'session'
+require_relative 'notificacao_listener'
+
+listener = NotificacaoListener.new
+listener.start
 
 pastel = Pastel.new
 prompt = TTY::Prompt.new
 
 loop do
   UI.cabecalho(pastel)
-
+  notifs = Session.pegar_notificacoes
+  unless notifs.empty?
+    puts
+    notifs.each do |msg|
+      puts pastel.yellow("📢 #{msg}")
+    end
+    puts
+  end
   opcao = prompt.select(pastel.bright_black("  O que deseja fazer?"), cycle: true) do |menu|
     menu.choice "Login",       :login
     menu.choice "Criar conta", :cadastro
@@ -39,6 +51,7 @@ loop do
         UI.erro(pastel, "CPF, senha ou tipo de conta incorretos.")
         sleep 2
       else
+        Session.login
         UI::TelaConta.new.exibir(conta)
       end
     rescue Errno::ECONNREFUSED, Errno::EAGAIN, Errno::EWOULDBLOCK, IO::TimeoutError
