@@ -2,377 +2,311 @@
 
 > Trabalho 1 — Sockets, Streams, Serialização e Representação Externa de Dados  
 > Disciplina: Sistemas Distribuídos
-> Integrantes: Arthur Lelis, Julio Emanuel.
 
----
+> Integrantes: Arthur Lelis, Julio Emanuel
 
-## 📋 Sumário
-
-- [Visão Geral](#-visão-geral)
-- [Modelagem do Sistema](#-modelagem-do-sistema)
-- [Classes de Serviço](#️-classes-de-serviço)
-- [Exercício 1 — POJOs e Serviços](#-exercício-1--pojos-e-serviços)
-- [Exercício 2 — OutputStream Customizado](#-exercício-2--outputstream-customizado)
-- [Exercício 3 — InputStream Customizado](#-exercício-3--inputstream-customizado)
-- [Exercício 4 — Comunicação Cliente-Servidor com Serialização](#-exercício-4--comunicação-cliente-servidor-com-serialização)
-- [Exercício 5 — Notificações Segmentadas com UDP Multicast](#-exercício-5--notificações-segmentadas-com-udp-multicast)
-- [Organização do Projeto](#-organização-do-projeto)
-- [Tecnologias](#-tecnologias)
-- [Como Executar](#-como-executar)
-
----
 
 ## 🌐 Visão Geral
 
-Sistema bancário distribuído implementado com comunicação cliente-servidor via sockets TCP/UDP. O servidor é desenvolvido em **Java** e o cliente em **Ruby**, demonstrando interoperabilidade entre linguagens via serialização JSON e streams binários customizados.
+Sistema bancário distribuído com comunicação cliente-servidor via sockets TCP. O servidor é desenvolvido em **Java** e o cliente em **Ruby**, demonstrando interoperabilidade entre linguagens via protocolo binário customizado.
 
-O sistema cobre operações bancárias básicas (depósito, saque, transferência, pagamento) e inclui um subsistema de notificações segmentadas via multicast UDP, onde o servidor envia alertas para clientes elegíveis com base no perfil de conta.
+O servidor persiste os dados em arquivo binário (`contas.bin`) usando streams customizados, atende múltiplos clientes simultaneamente com threads e transmite notificações em tempo real via **UDP Multicast**. O cliente Ruby oferece uma interface de terminal interativa e visualmente estilizada.
+
+---
+
+## ▶️ Como Executar
+
+### Servidor (Java)
+
+```bash
+# Compilar (a partir da pasta server/)
+javac -cp . interfaces/*.java models/*.java service/*.java stream/*.java notificacao/*.java sockets/*.java
+
+# Executar
+java sockets.ServidorTCP
+```
+
+O servidor inicia na porta **7897**, carrega o `contas.bin` se existir, e já sobe a thread de multicast automaticamente.
+
+### Cliente (Ruby)
+
+```bash
+# Instalar dependências
+gem install tty-prompt pastel
+
+# Executar (a partir da pasta client/)
+ruby client.rb
+```
+
+O cliente conecta ao servidor em `10.10.255.63:7897` e já inicia a escuta multicast em `239.0.0.1:12347` em background.
 
 ---
 
 ## 🧱 Modelagem do Sistema
 
-### Hierarquia de Classes (POJOs)
+### Hierarquia de Classes
 
 ```
-Conta (superclasse abstrata)
-├── ContaCorrente   implements Tributável
-└── ContaPoupanca
+Conta (abstrata)
+├── ContaCorrente   implements Tributável   → numeração a partir de 1000
+└── ContaPoupanca                           → numeração a partir de 5000
 ```
 
 ### 📦 Classes POJO
 
 #### `Cliente`
-| Atributo | Tipo     | Bytes |
-|----------|----------|-------|
-| id       | `int`    | 4     |
-| nome     | `String` | variável (2 bytes de tamanho + conteúdo UTF-8) |
-| cpf      | `String` | 11 bytes fixos |
+| Atributo | Tipo     | Detalhe |
+|----------|----------|---------|
+| id       | `int`    | Auto-incremento a partir de 1000 |
+| nome     | `String` | Nome completo |
+| cpf      | `String` | CPF do titular |
 
 #### `Conta` (abstrata)
-| Atributo | Tipo      | Bytes |
-|----------|-----------|-------|
-| numero   | `int`     | 4     |
-| saldo    | `double`  | 8     |
-| titular  | `Cliente` | referência OO |
+| Atributo | Tipo      | Detalhe |
+|----------|-----------|---------|
+| numero   | `int`     | Gerado automaticamente por subtipo |
+| saldo    | `double`  | Saldo atual |
+| titular  | `Cliente` | Referência ao cliente |
+| senha    | `String`  | Senha de acesso à conta |
 
 #### `ContaCorrente` extends `Conta` implements `Tributável`
-| Atributo | Tipo     | Bytes |
-|----------|----------|-------|
-| limite   | `double` | 8     |
+| Atributo | Tipo     | Detalhe |
+|----------|----------|---------|
+| limite   | `double` | Padrão R$ 1.200,00 |
 
 #### `ContaPoupanca` extends `Conta`
-| Atributo   | Tipo     | Bytes |
-|------------|----------|-------|
-| rendimento | `double` | 8     |
+| Atributo   | Tipo     | Detalhe |
+|------------|----------|---------|
+| rendimento | `double` | Padrão 0,5% ao mês (0.005) |
 
 #### `Banco`
-| Atributo       | Tipo            |
-|----------------|-----------------|
-| clientes       | `List<Cliente>` |
-| contas         | `List<Conta>`   |
-
-> `List<Conta>` é polimórfico — aceita `ContaCorrente` e `ContaPoupanca` sem duplicação de lógica.
+| Atributo | Tipo            |
+|----------|-----------------|
+| clientes | `List<Cliente>` |
+| contas   | `List<Conta>`   |
 
 ---
 
 ## 💰 Interface Tributável
 
-Aplicada a contas com incidência de imposto.
+Implementada por `ContaCorrente`. O imposto (10%) é aplicado sobre transferências enviadas por conta corrente, debitado junto ao valor transferido.
 
-```java
-public interface Tributavel {
-    double calcularImposto();
-}
-```
-
-`ContaCorrente` implementa `Tributavel`. O imposto é calculado e descontado no momento do saque.
+| Método | Retorno |
+|--------|---------|
+| `calcularImposto()` | `0.10` (10%) |
 
 ---
 
 ## ⚙️ Classes de Serviço
 
 ### `ContaService`
-Centraliza as regras de negócio sobre contas.
 
 | Método | Descrição |
 |--------|-----------|
-| `depositar(Conta, double)` | Adiciona saldo à conta |
-| `sacar(Conta, double)` | Remove saldo (valida limite em ContaCorrente) |
-| `transferir(Conta, Conta, double)` | Transfere valor entre duas contas |
-| `pagar(Conta, double, String)` | Realiza pagamento a um destinatário |
+| `abrirConta(Cliente, String senha, int tipo)` | Cria ContaCorrente (tipo 1) ou ContaPoupanca (tipo 2) |
+| `sacar(Conta, double)` | Remove saldo se houver cobertura |
+| `depositar(Conta, double)` | Adiciona saldo |
+| `transferir(Conta origem, Conta destino, double)` | Transfere com imposto de 10% para ContaCorrente |
+| `pagar(Conta, double, String descricao)` | Pagamento exclusivo para ContaCorrente |
+| `projetarRendimento(Conta, int meses)` | Projeção de saldo futuro para ContaPoupanca |
+| `buscarConta(int numero)` | Localiza conta pelo número |
+| `consultarExtrato(int numero)` | Retorna histórico de movimentações |
 
 ### `ClienteService`
-Gerencia operações relacionadas a clientes.
 
 | Método | Descrição |
 |--------|-----------|
-| `cadastrar(Cliente)` | Registra novo cliente |
-| `buscarPorCpf(String)` | Localiza cliente pelo CPF |
-| `listarContas(String cpf)` | Retorna todas as contas de um cliente |
+| `salvarOuObter(String nome, String cpf)` | Cadastra ou retorna cliente existente |
+| `buscarPorCpf(String cpf)` | Localiza cliente pelo CPF |
+| `listarContas(String cpf)` | Lista todas as contas de um cliente |
 
 ---
 
 ## 📌 Exercício 1 — POJOs e Serviços
 
-**Requisito:** Criar classes POJO representando o domínio e 2 classes que implementam serviços.
+**Requisito:** Classes POJO representando o domínio e 2 classes que implementam serviços.
 
-**Entrega:**
+**Entregues:**
 - POJOs: `Cliente`, `Conta`, `ContaCorrente`, `ContaPoupanca`, `Banco`
 - Interface: `Tributavel`
 - Serviços: `ContaService`, `ClienteService`
 
 ---
 
-## 📤 Exercício 2 — OutputStream Customizado
+## 📤 Exercício 2 — ContaOutputStream
 
-**Requisito:** Criar uma subclasse de `OutputStream` que serializa um array de POJOs como bytes.
+**Requisito:** Subclasse de `OutputStream` que serializa um array de `Conta` como bytes.
 
-### Classe: `ContaOutputStream`
+O `ContaOutputStream` encapsula um `DataOutputStream` internamente e serializa cada conta seguindo o protocolo binário definido na seção [Protocolo Binário](#-protocolo-binário). Além do método `write(Banco)`, expõe `writeInt`, `writeDouble` e `writeUTF` para uso pelo `ManipuladorCliente` nas respostas TCP.
 
-```java
-public class ContaOutputStream extends OutputStream {
-    public ContaOutputStream(Conta[] contas, int quantidade, OutputStream destino);
-    
-    @Override
-    public void write(int b) throws IOException;
-    
-    public void enviar() throws IOException;
-}
-```
+**Destinos utilizados no projeto:**
 
-**Protocolo de serialização por objeto `Conta`:**
-
-```
-[4 bytes] numero (int)
-[8 bytes] saldo (double)
-[4 bytes] id do titular (int)
-[2 bytes] tamanho do nome (short)
-[N bytes] nome do titular (UTF-8)
-[11 bytes] CPF do titular (String fixa)
-```
-
-**Testes:**
-
-| Destino | Implementação |
-|---------|--------------|
-| Saída padrão | `System.out` |
-| Arquivo | `FileOutputStream` |
-| Servidor remoto | Socket TCP |
+| Destino | Onde é usado |
+|---------|-------------|
+| `FileOutputStream` | Persistência em `contas.bin` após cada operação |
+| Socket TCP (`OutputStream`) | Resposta ao cliente Ruby no login |
+| `System.out` | Testes manuais |
 
 ---
 
-## 📥 Exercício 3 — InputStream Customizado
+## 📥 Exercício 3 — ContaInputStream
 
-**Requisito:** Criar uma subclasse de `InputStream` que lê os bytes gerados pelo `ContaOutputStream` e reconstrói os objetos.
+**Requisito:** Subclasse de `InputStream` que reconstrói objetos a partir dos bytes gerados pelo `ContaOutputStream`.
 
-### Classe: `ContaInputStream`
+O `ContaInputStream` encapsula um `DataInputStream` internamente. O método `read(Banco)` lê o arquivo `contas.bin` e reconstrói os objetos `ContaCorrente` e `ContaPoupanca` com seus respectivos titulares. Além disso, expõe `readInt`, `readDouble` e `readUTF` para que o `ManipuladorCliente` leia as requisições TCP.
 
-```java
-public class ContaInputStream extends InputStream {
-    public ContaInputStream(InputStream origem);
-    
-    @Override
-    public int read() throws IOException;
-    
-    public Conta[] receber(int quantidade) throws IOException;
-}
-```
+**Origens utilizadas no projeto:**
 
-**Testes:**
-
-| Origem | Implementação |
-|--------|--------------|
-| Entrada padrão | `System.in` |
-| Arquivo | `FileInputStream` |
-| Servidor remoto | Socket TCP |
+| Origem | Onde é usado |
+|--------|-------------|
+| `FileInputStream` | Carga inicial do `contas.bin` na inicialização do servidor |
+| Socket TCP (`InputStream`) | Leitura das requisições do cliente Ruby |
 
 ---
 
-## 🔄 Exercício 4 — Comunicação Cliente-Servidor com Serialização
+## 🔄 Exercício 4 — Comunicação Cliente-Servidor
 
-**Requisito:** Serviço remoto via TCP com empacotamento/desempacotamento de mensagens JSON.
+**Requisito:** Serviço remoto via TCP com empacotamento e desempacotamento de mensagens.
 
-### Fluxo de uma Transferência
+### Servidor Java
 
-**1. Cliente empacota e envia:**
-```json
-{
-  "operacao": "transferencia",
-  "origem": 123,
-  "destino": 456,
-  "valor": 100.0
-}
-```
-
-**2. Servidor:**
-- Recebe a requisição via socket TCP
-- Desserializa JSON → objeto
-- Executa regra de negócio via `ContaService`
-- Empacota e retorna a resposta
-
-**3. Servidor responde:**
-```json
-{
-  "status": "sucesso",
-  "saldoAtualizado": 250.0,
-  "mensagem": "Transferência realizada com sucesso"
-}
-```
-
-**4. Cliente desempacota e exibe o resultado.**
-
-### Operações suportadas
-
-| Operação       | Campos obrigatórios na requisição |
-|----------------|-----------------------------------|
-| `deposito`     | `conta`, `valor` |
-| `saque`        | `conta`, `valor` |
-| `transferencia`| `origem`, `destino`, `valor` |
-| `pagamento`    | `conta`, `valor`, `destinatario` |
-| `saldo`        | `conta` |
-
-### Servidor Multi-thread
-
-O servidor cria uma nova thread para cada conexão recebida:
+O servidor escuta na porta **7897**. Para cada conexão aceita, cria uma nova `Thread` (classe `Connection`). Dentro da thread, um loop contínuo aguarda operações do cliente via `ManipuladorCliente`, executa a regra de negócio e persiste os dados em `contas.bin` após cada operação.
 
 ```
-ServidorTCP
-└── aceita conexão
-    └── nova Thread(ManipuladorCliente)
-        ├── desempacota requisição
-        ├── executa ContaService
-        └── empacota e envia resposta
+ServidorTCP (porta 7897)
+└── aceita conexão → new Connection(thread)
+    └── loop:
+        ├── ManipuladorCliente.processar()
+        │   ├── lê operação (int)
+        │   ├── executa ContaService / ClienteService
+        │   └── envia resposta
+        └── persiste contas.bin
 ```
+
+### Operações disponíveis (protocolo de operações)
+
+| Código | Operação | Enviado pelo cliente | Resposta do servidor |
+|--------|----------|----------------------|----------------------|
+| `1` | Cadastro | nome, cpf, senha, tipo | `0` = ok, `-1` = CPF já existe |
+| `2` | Login | cpf, senha, tipo | `0` + dados da conta, ou `-1` |
+| `3` | Saque | numero\_conta, valor | `0` = ok, `-2` = saldo insuficiente |
+| `4` | Depósito | numero\_conta, valor | `0` = ok, `-2` = erro |
+| `5` | Transferência | num\_origem, num\_destino, valor | `0` + nome\_destino, ou código de erro |
+| `6` | Pagamento | numero\_conta, valor, descricao | `0` = ok, `-2` = saldo insuficiente |
+| `7` | Projetar rendimento | numero\_conta, meses | `0` + valor projetado |
+| `8` | Extrato | numero\_conta | `0` + quantidade + linhas do histórico |
+
+### Cliente Ruby
+
+O cliente conecta via `TCPSocket` na mesma porta. A classe `Connection` encapsula todos os métodos de comunicação, usando `write_int`, `write_double`, `write_utf` para envio e `read_int`, `read_double`, `read_utf` para leitura — todos respeitando big-endian, compatível com o `DataOutputStream` do Java.
+
+A deserialização das contas recebidas no login é feita pelo módulo `Protocol`, que lê os bytes na mesma ordem que o `ContaOutputStream` Java escreve.
+
+### Heterogeneidade entre Java e Ruby
+
+Como Java e Ruby são linguagens diferentes, a comunicação binária exige que ambos os lados usem a mesma convenção de bytes. O Java escreve em **big-endian** por padrão (`DataOutputStream`). O Ruby usa os seguintes format directives no `unpack` para garantir compatibilidade:
+
+| Tipo Java | Format Ruby | Bytes |
+|-----------|-------------|-------|
+| `int` | `N` | 4 |
+| `double` | `G` | 8 |
+| `String` (UTF, 2 bytes tamanho) | `n` + leitura manual | variável |
 
 ---
 
-## 📣 Exercício 5 — Notificações Segmentadas com UDP Multicast
+## 📣 Exercício 5 — Notificações via UDP Multicast
 
-**Requisito:** Comunicação multicast UDP adaptada ao contexto bancário. O servidor envia notificações para grupos de clientes com base no perfil de conta (ex: saldo mínimo), com a **validação feita inteiramente no servidor**.
+**Requisito:** Comunicação multicast UDP adaptada ao contexto bancário.
 
-### Ideia Central
+### Como funciona
 
-O gerente do banco dispara uma notificação direcionada a clientes com saldo acima de um determinado valor. O servidor consulta os clientes elegíveis, gera um token individual para cada um e envia a mensagem via multicast UDP. Cada cliente recebe a mensagem, mas só a exibe se o token presente na mensagem for o seu — garantindo que a regra de negócio fica no servidor.
+O servidor roda uma thread dedicada (`ServidorMulticast`) que envia mensagens informativas e avisos bancários a cada **15 segundos** para o grupo multicast `239.0.0.1` na porta **12347**.
 
-### Arquitetura
+O cliente Ruby, ao iniciar, cria uma thread (`NotificacaoListener`) que se inscreve nesse grupo multicast e fica escutando indefinidamente. Quando uma mensagem chega e o usuário está logado (`Session.logado?`), a notificação é exibida no terminal em tempo real sem interromper a navegação nas telas.
 
-```
-┌─────────────┐  TCP (login/token)  ┌──────────────────────┐
-│   Cliente   │◄───────────────────►│                      │
-│   Bancário  │                     │  Servidor Bancário   │
-└─────────────┘                     │    (multi-thread)    │
-                                    │                      │
-┌─────────────┐  TCP (unicast)      │  1. Consulta saldos  │
-│  Gerente    │───────────────────► │  2. Gera tokens      │
-└─────────────┘  dispara notif.     │  3. Envia multicast  │
-                                    └──────────┬───────────┘
-                                               │
-                              UDP Multicast    │
-                         (todos recebem,       │
-                      só o dono do token exibe)│
-                    ┌──────────────────────────┘
-                    ▼
-         224.0.0.1:5000 (grupo multicast)
-```
+### Por que é multicast de verdade
 
-### Fluxo Detalhado
+Todos os clientes conectados se inscrevem no mesmo grupo multicast no momento em que iniciam. O servidor envia **uma única vez** para o endereço do grupo — não para cada cliente individualmente. Quem está inscrito recebe; quem não está, não recebe nada. Não há lista de destinatários, não há broadcast para toda a rede.
 
-**1. Cliente faz login via TCP**
-O servidor autentica e registra o cliente com seu token único na sessão.
+### Exemplos de mensagens enviadas
 
-**2. Gerente dispara uma notificação via TCP:**
-```json
-{
-  "tipo": "notificacao",
-  "condicao": "saldo_minimo",
-  "valor": 5000.0,
-  "mensagem": "Você tem uma oferta exclusiva de investimento disponível."
-}
-```
-
-**3. Servidor processa (regra de negócio centralizada):**
-- Consulta todos os clientes conectados
-- Filtra quem possui saldo ≥ R$ 5.000
-- Para cada cliente elegível, gera um token único
-- Envia via UDP multicast uma mensagem com a lista de tokens autorizados
-
-**4. Mensagem multicast enviada para o grupo:**
-```json
-{
-  "tipo": "notificacao",
-  "tokens": ["tok_abc123", "tok_xyz789"],
-  "mensagem": "Você tem uma oferta exclusiva de investimento disponível.",
-  "timestamp": "2024-06-10T14:30:00"
-}
-```
-
-**5. Cada cliente recebe e verifica:**
-- Recebeu o pacote UDP (todos no grupo recebem)
-- Verifica se seu token está na lista `tokens`
-- Se sim → exibe a notificação
-- Se não → descarta silenciosamente
-
-### Exemplos de Notificações Suportadas
-
-| Condição no servidor | Mensagem enviada |
-|----------------------|-----------------|
-| Saldo ≥ R$ 5.000 | "Oferta exclusiva de investimento disponível" |
-| Saldo ≥ R$ 10.000 | "Seu perfil foi atualizado para cliente Premium" |
-| Possui `ContaCorrente` com limite | "Nova condição especial de crédito disponível" |
-| Todos os clientes | "O sistema entrará em manutenção às 23h" |
-
-### Por que a validação fica no servidor?
-
-A regra de negócio (quem tem saldo suficiente) é sensível e não deve ser exposta ao cliente. O cliente nunca sabe o critério de elegibilidade — ele apenas verifica se possui um token válido na mensagem recebida. Isso mantém a lógica centralizada e segura, enquanto o multicast UDP ainda é usado para o broadcast eficiente da notificação.
+- `"SEGURANÇA: O banco nunca solicita tokens ou senhas por telefone."`
+- `"OFERTA: Antecipe seu 13º salário com as menores taxas do mercado."`
+- `"ALERTA: Identificou uma movimentação estranha? Bloqueie sua conta imediatamente."`
+- `"DICA FINANCEIRA: Gastar menos do que ganha é o primeiro passo para o sucesso."`
 
 ---
 
 ## 📁 Organização do Projeto
 
 ```
-sistema-bancario-distribuido/
+sistema-bancario-simplificado/
 │
-├── servidor/                        # Java
-│   ├── models/
-│   │   ├── Cliente.java
-│   │   ├── Conta.java
-│   │   ├── ContaCorrente.java
-│   │   ├── ContaPoupanca.java
-│   │   └── Banco.java
-│   │
+├── server/                          # Java
 │   ├── interfaces/
 │   │   └── Tributavel.java
 │   │
-│   ├── services/
-│   │   ├── ContaService.java
-│   │   └── ClienteService.java
+│   ├── models/
+│   │   ├── Banco.java
+│   │   ├── Cliente.java
+│   │   ├── Conta.java
+│   │   ├── ContaCorrente.java
+│   │   └── ContaPoupanca.java
 │   │
-│   ├── streams/                     # Exercícios 2 e 3
+│   ├── service/
+│   │   ├── ClienteService.java
+│   │   └── ContaService.java
+│   │
+│   ├── stream/                      # Exercícios 2 e 3
 │   │   ├── ContaOutputStream.java
 │   │   └── ContaInputStream.java
 │   │
-│   ├── sockets/                     # Exercícios 4 e 5
+│   ├── sockets/                     # Exercício 4
 │   │   ├── ServidorTCP.java
-│   │   ├── ManipuladorCliente.java
-│   │   └── MulticastSender.java
+│   │   └── ManipuladorCliente.java
 │   │
 │   └── notificacao/                 # Exercício 5
-│       ├── Notificacao.java
-│       ├── GerenciadorTokens.java
 │       └── ServidorMulticast.java
 │
-├── cliente/                         # Ruby
-│   ├── main.rb
-│   ├── client/
-│   │   ├── banco_client.rb          # Exercício 4
-│   │   └── notificacao_client.rb    # Exercício 5 — escuta grupo multicast
-│   └── models/
-│       ├── conta.rb
-│       └── cliente.rb
+├── client/                          # Ruby
+│   ├── client.rb                    # Ponto de entrada
+│   ├── connection.rb                # Comunicação TCP com o servidor
+│   ├── protocol.rb                  # Deserialização das contas (unpack)
+│   ├── models.rb                    # Structs Cliente e Conta
+│   ├── session.rb                   # Controle de sessão do usuário
+│   ├── notificacao_listener.rb      # Exercício 5 — escuta multicast UDP
+│   └── ui/
+│       ├── banner.rb                # Utilitários visuais do terminal
+│       ├── tela_login.rb            # Tela de login
+│       ├── tela_cadastro.rb         # Tela de abertura de conta
+│       └── tela_conta.rb            # Dashboard da conta logada
 │
 └── README.md
 ```
+
+---
+
+## 📡 Protocolo Binário
+
+Formato usado pelo `ContaOutputStream` para serializar cada conta. O `ContaInputStream` lê na mesma ordem. O cliente Ruby replica essa leitura via `unpack`.
+
+```
+[4 bytes - int]     quantidade de contas
+para cada conta:
+  [4 bytes - int]   tipo (1 = ContaCorrente, 2 = ContaPoupanca)
+  [4 bytes - int]   id do titular
+  [4 bytes - int]   tamanho do nome (bytes UTF-8)
+  [N bytes]         nome do titular
+  [4 bytes - int]   tamanho do CPF (bytes UTF-8)
+  [M bytes]         CPF do titular
+  [4 bytes - int]   número da conta
+  [8 bytes - double] saldo
+  [4 bytes - int]   tamanho da senha (bytes UTF-8)
+  [S bytes]         senha
+  [8 bytes - double] limite (ContaCorrente) ou rendimento (ContaPoupanca)
+```
+
+> Todos os valores inteiros e double são escritos em **big-endian**, padrão do `DataOutputStream` do Java.
 
 ---
 
@@ -382,69 +316,13 @@ sistema-bancario-distribuido/
 |------------|------------|
 | Servidor | Java 17+ |
 | Cliente | Ruby 3.x |
-| Comunicação principal | TCP Sockets |
-| Comunicação multicast | UDP Sockets |
-| Serialização (ex. 4 e 5) | JSON |
-| Streams binários (ex. 2 e 3) | Java OutputStream/InputStream customizados |
-| Concorrência | Java Threads (uma por conexão) |
+| Comunicação TCP | Sockets Java / `TCPSocket` Ruby |
+| Comunicação Multicast | `DatagramSocket` Java / `UDPSocket` Ruby |
+| Serialização | Protocolo binário customizado (big-endian) |
+| Persistência | Arquivo binário `contas.bin` |
+| Interface do terminal | `tty-prompt`, `pastel` (Ruby gems) |
+| Concorrência | Java Threads (uma por conexão) + Thread Ruby (multicast) |
 
 ---
 
-## ▶️ Como Executar
-
-### Servidor (Java)
-
-```bash
-# Compilar
-javac -cp . servidor/**/*.java
-
-# Exercício 4 — Servidor bancário TCP
-java servidor.sockets.ServidorTCP
-
-# Exercício 5 — Servidor de notificações multicast
-java servidor.sockets.MulticastSender
-```
-
-### Cliente (Ruby)
-
-```bash
-# Instalar dependências
-bundle install
-
-# Exercício 4 — Cliente bancário
-ruby cliente/main.rb
-
-# Exercício 5 — Cliente escutando notificações
-ruby cliente/client/notificacao_client.rb
-```
-
-### Testes dos Streams (Exercícios 2 e 3)
-
-```bash
-# Saída padrão
-java servidor.streams.TesteOutputStream stdout
-
-# Arquivo
-java servidor.streams.TesteOutputStream arquivo contas.bin
-
-# Servidor TCP
-java servidor.streams.TesteOutputStream tcp localhost 9090
-```
-
----
-
-## 📌 Ordem de Implementação Recomendada
-
-1. **POJOs e hierarquia de classes** (Conta → ContaCorrente/ContaPoupanca)
-2. **ContaOutputStream** com destino `System.out` (mais simples para depurar)
-3. **ContaInputStream** lendo de `System.in`
-4. **Testes com arquivo** (FileOutputStream / FileInputStream)
-5. **Servidor TCP simples** com mensagens de texto
-6. **Serialização JSON** e integração com `ContaService`
-7. **Testes com socket TCP** nos streams
-8. **Cliente Ruby** conectando ao servidor
-9. **Sistema de notificações** com multicast UDP e tokens
-
----
-
-> **Nota:** A persistência em banco de dados é opcional para o escopo deste trabalho. Os dados são mantidos em memória dentro da instância de `Banco` durante a execução do servidor.
+> **Nota:** O endereço do servidor está definido em `connection.rb` nas constantes `NGROK_HOST` e `NGROK_PORT`. Altere conforme o ambiente de execução.
