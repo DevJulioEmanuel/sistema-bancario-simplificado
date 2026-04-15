@@ -5,6 +5,8 @@
 
 > Integrantes: Arthur Lelis, Julio Emanuel
 
+> Link do vídeo: https://www.youtube.com/watch?v=s6Vr0I9ImBg 
+
 
 ## 🌐 Visão Geral
 
